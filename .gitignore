@@ -1,22 +1,72 @@
-### AL ###
-#Template for AL projects for Dynamics 365 Business Central
-#launch.json folder
+# QuadrupedThesis
+# --- SİSTEM DOSYALARI (Mac & Linux) ---
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Trashes
+Thumbs.db
+desktop.ini
+
+# --- PYTHON & ORTAM ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.env
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# --- IDE AYARLARI (VS Code, PyCharm) ---
 .vscode/
-#Cache folder
-.alcache/
-#Symbols folder
-.alpackages/
-#Snapshots folder
-.snapshots/
-#Testing Output folder
-.output/
-#Extension App-file
-*.app
-#Rapid Application Development File
-rad.json
-#Translation Base-file
-*.g.xlf
-#License-file
-*.flf
-#Test results file
-TestResults.xml
+.idea/
+*.swp
+
+# --- JUPYTER NOTEBOOKS ---
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+
+# --- TEZ PROJE KLASÖRLERİ (Büyük Dosyalar) ---
+# Logları asla GitHub'a atma (binlerce dosya oluşur)
+data/logs/
+runs/
+wandb/
+
+# Model ağırlıkları (Checkpoints)
+# GitHub 100MB üstü dosyaları kabul etmez. Bunları Drive/HDD'de tut.
+data/checkpoints/*.pt
+data/checkpoints/*.pth
+data/models/*.pt
+*.ckpt
+
+# Ancak klasör yapısı korunsun diye .gitkeep dosyalarına izin ver
+!data/logs/.gitkeep
+!data/checkpoints/.gitkeep
+
+# --- ISAAC SIM & ISAAC LAB ---
+# Isaac Lab'in kendisini yanlışlıkla kopyalarsan diye önlem:
+IsaacLab/
+_isaac_sim/
+*.usd
+*.usda
+*.usdc
+*.ov
+
+# --- MULTIMEDIA & ÇIKTILAR ---
+# Eğitim sırasında kaydedilen videolar
+*.mp4
+*.gif
+*.png
+*.jpg
+# Sadece dokümantasyon için assets klasöründeki resimlere izin ver
+!assets/*.png
+!assets/*.jpg
+
+# --- EĞİTİM GEÇİCİ DOSYALARI ---
+latest_run/
+temp/
+tmp/
