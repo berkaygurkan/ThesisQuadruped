@@ -35,6 +35,11 @@ dist/
 data/logs/
 runs/
 wandb/
+configs/exported/
+__pycache__/
+.ipynb_checkpoints/
+.venv
+venv/
 
 # Model ağırlıkları (Checkpoints)
 # GitHub 100MB üstü dosyaları kabul etmez. Bunları Drive/HDD'de tut.

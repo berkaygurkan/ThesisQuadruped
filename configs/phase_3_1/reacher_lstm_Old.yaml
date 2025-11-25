@@ -1,0 +1,32 @@
+experiment:
+  name: "Phase-3.1.0-MetaRL-Reacher-LSTM"
+  description: "Variable Damping coefficients check using RecurrentPPO"
+  framework: "sb3_contrib" # LSTM desteği için contrib kullanıyoruz
+
+env:
+  id: "Reacher-v5" # v4 yerine v5 (Gymnasium)
+  n_envs: 2        # Paralel ortam sayısı (CPU core sayısına göre ayarlayın)
+  wrappers:
+    - name: "RandomDampingWrapper"
+      args:
+        min_damping: 0.5
+        max_damping: 2.0
+
+training:
+  algo: "RecurrentPPO"
+  total_timesteps: 500000
+  seeds: [42, 43, 44] # İSTATİSTİKSEL GÜVENİLİRLİK İÇİN ZORUNLU
+  device: "auto"      # src/utils/device.py ile çözümlenecek
+
+hyperparameters:
+  policy_type: "MlpLstmPolicy"
+  learning_rate: 0.0003
+  n_steps: 2048
+  batch_size: 64
+  gamma: 0.99
+  gae_lambda: 0.95
+  policy_kwargs:
+    lstm_hidden_size: 256
+    shared_lstm_layers: False
+    n_lstm_layers: 1
+    enable_critic_lstm: True # Value function da hafızaya sahip olsun

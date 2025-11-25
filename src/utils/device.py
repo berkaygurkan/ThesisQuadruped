@@ -1,26 +1,37 @@
 import torch
 import platform
-import os
 import logging
 
-def get_optimal_device() -> torch.device:
+def get_optimal_device(force_cpu: bool = False) -> torch.device:
     """
-    İşletim sistemini ve mevcut donanımı analiz ederek en uygun cihazı döndürür.
-    Mac (MPS) için float32 zorlaması yapar.
+    Mevcut donanımı analiz eder ve en uygun PyTorch cihazını döndürür.
+    Mac (Apple Silicon) için MPS, NVIDIA için CUDA, aksi halde CPU seçer.
+    
+    Args:
+        force_cpu (bool): True ise donanım hızlandırmayı yoksayar.
+    
+    Returns:
+        torch.device: Seçilen cihaz.
     """
-    device = torch.device("cpu")
-    
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-        logging.info(f"🟢 CUDA Device Found: {torch.cuda.get_device_name(0)}")
-    
-    elif torch.backends.mps.is_available() and platform.system() == "Darwin":
-        device = torch.device("mps")
-        # Mac silikon işlemcilerde bfloat16 hatalara yol açabilir, float32 zorluyoruz.
-        os.environ['PYTORCH_MPS_HIGH_WATERMARK_RATIO'] = '0.0' 
-        logging.info("🟠 Apple Metal (MPS) Device Found. Using strict float32 context.")
-    
-    else:
-        logging.warning("⚪ No accelerator found. Using CPU.")
+    if force_cpu:
+        logging.info("⚠️ Device forced to CPU.")
+        return torch.device("cpu")
 
-    return device
+    system = platform.system()
+    
+    # 1. Mac OS (Apple Silicon) Kontrolü
+    if system == "Darwin" and torch.backends.mps.is_available():
+        logging.info("🚀 Apple Silicon (MPS) detected. Using Metal Performance Shaders.")
+        # KRİTİK: MPS şu an bazı operasyonlarda float64 desteklemiyor, float32'ye zorlamak gerekebilir.
+        # Bu ayar genellikle model tanımında dtype=torch.float32 ile yapılır ama burada logluyoruz.
+        return torch.device("mps")
+    
+    # 2. NVIDIA CUDA Kontrolü
+    elif torch.cuda.is_available():
+        logging.info(f"🚀 NVIDIA GPU detected: {torch.cuda.get_device_name(0)}")
+        return torch.device("cuda")
+    
+    # 3. Fallback
+    else:
+        logging.warning("⚠️ No GPU acceleration detected. Running on CPU (Slow).")
+        return torch.device("cpu")

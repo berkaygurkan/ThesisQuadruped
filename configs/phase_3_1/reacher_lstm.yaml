@@ -1,0 +1,39 @@
+experiment:
+  name: "Phase-3.1-Reacher-MetaRL-ActionAware"
+  description: "LSTM with Previous Action Input for Implicit System ID"
+  run_id: "phase3_1_v3_action_input"
+
+env:
+  id: "Reacher-v5"
+  n_envs: 2
+  wrappers:
+    - name: "RandomDampingWrapper"
+      args:
+        min_damping: 0.5
+        max_damping: 2.0
+    - name: "PreviousActionWrapper" # YENİ: Hocanın istediği kritik eklenti
+      args: {}
+
+training:
+  algo: "RecurrentPPO"
+  total_timesteps: 500000
+  seeds: [44]
+  device: "auto"
+
+hyperparameters:
+  policy_type: "MlpLstmPolicy"
+  learning_rate: 0.0003
+  n_steps: 2048
+  batch_size: 64
+  gamma: 0.99
+  gae_lambda: 0.95
+  ent_coef: 0.01
+  # ANALİST DÜZELTMESİ: Tüm ağ parametreleri buradan okunacak
+  policy_kwargs:
+    lstm_hidden_size: 256      # Hoca: 64->128
+    n_lstm_layers: 1           # Hoca: 1->2
+    shared_lstm: False         # Hoca: Ayrık yapılar
+    enable_critic_lstm: True   # Kritik
+    net_arch: 
+      pi: [64, 64]
+      vf: [64, 64]
