@@ -1,140 +1,141 @@
 """
-GÖREV: Eğitilmiş PPO Modelini Oynatma (Play/Inference)
-DURUM: SB3 VecEnv API uyumsuzluğu giderildi.
+GÖREV: Play/Inference (HATA KORUMALI & NATIVE ENJECTION)
+DURUM: 'list' vs 'dict' hatası giderildi. Komut sistemi otomatik algılanır.
 """
 
 import argparse
 import os
-import sys
 import glob
-import time
+import torch
+import sys
+import numpy as np
 from datetime import datetime
 
 # --- 1. IsaacLab Başlatıcı ---
 from isaaclab.app import AppLauncher
 
-# Argümanlar
-parser = argparse.ArgumentParser(description="Play/Inference Script")
-parser.add_argument("--num_envs", type=int, default=4, help="Görselleştirme için ortam sayısı")
+parser = argparse.ArgumentParser()
+parser.add_argument("--num_envs", type=int, default=4, help="Ortam sayısı")
 parser.add_argument("--seed", type=int, default=42, help="Seed")
-
-# IsaacLab argümanlarını ekle
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
-# Uygulamayı başlat
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 # --- 2. Importlar ---
-import torch
-import numpy as np
 from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab_rl.sb3 import Sb3VecEnvWrapper
 from stable_baselines3 import PPO
 
-# Ortam Konfigürasyonu
+# Ortam
 try:
     from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
 except ImportError:
     from isaaclab_tasks.manager_based.locomotion.velocity.config.ant.ant_env_cfg import AntEnvCfg
 
-# --- 3. Model Bulma Yardımcısı ---
+# --- 3. Model Bulucu ---
 def get_latest_model_path(search_dir="models/baseline"):
-    if not os.path.exists(search_dir):
-        # Eğer baseline yoksa, interrupt edilmiş modellere bak (debug için)
-        if os.path.exists("models"):
-             search_dir = "models"
-        else:
-             raise FileNotFoundError(f"Model klasörü bulunamadı: {search_dir}")
-    
+    if not os.path.exists(search_dir): search_dir = "models"
+    if not os.path.exists(search_dir): 
+        print(f"[UYARI] '{search_dir}' bulunamadı.")
+        return None 
+
     list_of_dirs = glob.glob(os.path.join(search_dir, "*"))
-    if not list_of_dirs:
-        raise FileNotFoundError(f"{search_dir} altında hiç model klasörü yok.")
+    if not list_of_dirs: return None
     
-    # En yeni klasörü bul
     latest_dir = max(list_of_dirs, key=os.path.getctime)
     
-    # Model dosyasını ara
     model_path = os.path.join(latest_dir, "final_model.zip")
     if not os.path.exists(model_path):
-        # Checkpointlere bak
         checkpoints = glob.glob(os.path.join(latest_dir, "*.zip"))
-        if checkpoints:
-            model_path = max(checkpoints, key=os.path.getctime)
-        else:
-            # Belki direkt klasörün içindedir (basit kaydetme)
-            possible_model = latest_dir + ".zip"
-            if os.path.exists(possible_model):
-                model_path = possible_model
-            else:
-                raise FileNotFoundError(f"Model bulunamadı: {latest_dir}")
-            
-    print(f"[OTOMATİK SEÇİM] Yüklenen Model: {model_path}")
+        if checkpoints: model_path = max(checkpoints, key=os.path.getctime)
+        else: return latest_dir + ".zip"
+    print(f"[MODEL] {model_path}")
     return model_path
 
-# --- 4. Ana Oynatma Fonksiyonu ---
+# --- 4. Ana Fonksiyon ---
 def main():
-    try:
-        model_path = get_latest_model_path()
-    except Exception as e:
-        print(f"[HATA] {e}")
-        print("Lütfen önce 'phase_311_IsaacAntVanillaPPO.py' ile eğitim yapın.")
+    model_path = get_latest_model_path()
+    if not model_path:
+        print("[HATA] Model bulunamadı. Lütfen önce eğitim yapın.")
         return
 
-    # Ortam Ayarları
+    # Ortam Kurulumu
     env_cfg = AntEnvCfg()
     env_cfg.scene.num_envs = args_cli.num_envs
-    env_cfg.sim.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-
-    print(f"[INFO] Ortam Yükleniyor (GUI)... Env: {args_cli.num_envs}")
+    env_cfg.sim.device = "cuda:0"
     
-    # Ortamı oluştur ve sarmala
-    env = ManagerBasedRLEnv(cfg=env_cfg)
-    env = Sb3VecEnvWrapper(env) # SB3 uyumluluğu
+    base_env = ManagerBasedRLEnv(cfg=env_cfg)
+    env = Sb3VecEnvWrapper(base_env)
+    model = PPO.load(model_path, env=env)
+    
+    print("-" * 60)
+    print("SİMÜLASYON BAŞLADI - ROBUST COMMAND MODE")
+    print("-" * 60)
 
-    # Modeli Yükle
-    print("[INFO] Model yükleniyor...")
-    try:
-        model = PPO.load(model_path, env=env)
-    except Exception as e:
-        print(f"[HATA] Model yükleme başarısız: {e}")
-        env.close()
-        return
+    # --- [CRITICAL FIX] KOMUT TERİMİNİ GÜVENLİ YAKALAMA ---
+    cmd_mgr = base_env.command_manager
+    active_terms = cmd_mgr.active_terms
+    command_term = None # Hedef terim objesi
+    
+    # 1. Veri tipi kontrolü ve Terimi Yakalama
+    if isinstance(active_terms, dict):
+        # Sözlük ise (İsim -> Obje)
+        if len(active_terms) > 0:
+            term_name = list(active_terms.keys())[0]
+            command_term = active_terms[term_name]
+            print(f"[DEBUG] Komut Sistemi: DICT (Terim: {term_name})")
+    
+    elif isinstance(active_terms, list):
+        # Liste ise (Obje Listesi)
+        if len(active_terms) > 0:
+            command_term = active_terms[0]
+            print(f"[DEBUG] Komut Sistemi: LIST (Index: 0)")
+            
+    else:
+        print(f"[UYARI] Bilinmeyen active_terms tipi: {type(active_terms)}")
 
-    # --- 5. Simülasyon Döngüsü ---
-    print("-" * 50)
-    print("[INFO] Simülasyon Başlıyor. (Çıkış: Pencereyi Kapat veya Ctrl+C)")
-    print("-" * 50)
+    # 2. Hata Kontrolü
+    if command_term is None:
+        print("[HATA] Aktif komut terimi bulunamadı! Robot rastgele hareket edebilir.")
+    else:
+        print(f"[BİLGİ] Komut Enjeksiyonu Hazır. Hedef: 1.5 m/s")
 
-    # [DÜZELTME 1] SB3 Wrapper reset() sadece obs döner, tuple dönmez!
     obs = env.reset()
-
+    
+    # Hedef Hız Vektörü (Vx=1.5, Vy=0, w=0)
+    target_vel = torch.tensor([1.5, 0.0, 0.0], device=base_env.device).repeat(base_env.num_envs, 1)
+    
     step_count = 0
-    try:
-        while simulation_app.is_running():
-            # Model tahmini
-            action, _ = model.predict(obs, deterministic=True)
-            
-            # [DÜZELTME 2] SB3 Wrapper step() 4 değer döner: obs, reward, done, info
-            # (Gymnasium'un 5 değerini 4'e indirger)
-            obs, reward, done, info = env.step(action)
-            
-            # İsteğe bağlı: Hız bilgisi yazdırma (Info içindeyse)
-            step_count += 1
-            if step_count % 100 == 0:
-                # Ödül ortalamasını yazdır
-                mean_reward = reward.mean().item()
-                print(f"Step: {step_count} | Ortalama Ödül: {mean_reward:.4f}")
 
-    except KeyboardInterrupt:
-        print("\n[BİLGİ] Kullanıcı çıkışı.")
-    except Exception as e:
-        print(f"\n[HATA] Simülasyon hatası: {e}")
-    finally:
-        env.close()
-        simulation_app.close()
-        print("[INFO] Kapatıldı.")
+    while simulation_app.is_running():
+        # --- ENJEKSİYON (HER ADIMDA) ---
+        if command_term is not None:
+            # Buffer'a doğrudan yazıyoruz. Bu işlem kesindir.
+            command_term.command[:] = target_vel
+
+        # Model Tahmini
+        action, _ = model.predict(obs, deterministic=True)
+        obs, reward, done, info = env.step(action)
+        step_count += 1
+        
+        # --- İZLEME ---
+        if step_count % 20 == 0:
+            # Gerçek Hız
+            robot_vel = base_env.scene["robot"].data.root_lin_vel_b
+            vx = robot_vel[0, 0].item()
+            
+            # Hedef Hız (Okuma)
+            current_target = -1.0
+            if command_term is not None:
+                # Command tensor şekli [N, 3] varsayılır
+                current_target = command_term.command[0, 0].item()
+
+            print(f"Robot 0 | Hız: {vx:.2f} m/s (Hedef: {current_target:.2f}) | Ödül: {reward[0]:.2f}")
+
+    env.close()
+    simulation_app.close()
 
 if __name__ == "__main__":
     main()

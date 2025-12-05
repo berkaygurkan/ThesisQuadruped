@@ -77,8 +77,8 @@ def main():
         env,
         verbose=1,
         tensorboard_log=log_dir,
-        n_steps=2048,
-        batch_size=int(64 * args_cli.num_envs / 4), # Batch size ölçekleme
+        n_steps=24,
+        batch_size=32768, #int(64 * args_cli.num_envs / 4), # Batch size ölçekleme
         learning_rate=3e-4,
         device="cuda"
     )
@@ -96,7 +96,7 @@ def main():
 
     try:
         model.learn(
-            total_timesteps=1_000_000, # 5M Adım
+            total_timesteps=20_000_000, # 5M Adım
             callback=checkpoint_callback,
             progress_bar=True
         )
