@@ -1,5 +1,4 @@
-#### 📄 Dosya 2: `Tez_Akis_Plani.md`
-*(Detaylandırılmış Yol Haritası)*
+
 
 ```markdown
 # FAZ 3: META-RL İLE HATA TOLERANSI ÇALIŞMA PLANI (DETAYLI)
@@ -11,7 +10,7 @@
 **Amaç:** Ajanın hafızasını (RNN) kullanarak değişen fiziksel parametreleri (Context) öğrenmesi.
 
 #### 🟢 Adım 3.1.0: Prototip - Reacher (Damping Değişimi)
-* **Ortam:** `Reacher-vv5` (MuJoCo).
+* **Ortam:** `Reacher-v5` (MuJoCo).
 * **Görev:** Robot kolunun eklem sürtünmesi (damping) her epizotta rastgele değişir.
 * **Varyasyon Testi (Side-by-Side):**
     1.  `PPO + LSTM`: Uzun süreli hafıza.

@@ -13,40 +13,15 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Lab Günlük/2025-11-25.md",
-                "mode": "source",
-                "source": false,
-                "backlinks": true,
-                "backlinkOpts": {
-                  "collapseAll": false,
-                  "extraContext": false,
-                  "sortOrder": "alphabetical",
-                  "showSearch": false,
-                  "searchQuery": "",
-                  "backlinkCollapsed": false,
-                  "unlinkedCollapsed": true
-                }
-              },
-              "icon": "lucide-file",
-              "title": "2025-11-25"
-            }
-          },
-          {
-            "id": "6ecd19fc9b83e1c8",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "Karalama Defteri.md",
+                "file": "Tez_Akis_Plani.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Karalama Defteri"
+              "title": "Tez_Akis_Plani"
             }
           }
-        ],
-        "currentTab": 1
+        ]
       }
     ],
     "direction": "vertical"
@@ -208,13 +183,17 @@
       "bases:Create new base": false
     }
   },
-  "active": "6ecd19fc9b83e1c8",
+  "active": "645ff7abcadc3944",
   "lastOpenFiles": [
-    "Lab Günlük/2025-11-25.md",
-    "Karalama Defteri.md",
+    "Tez_Yonetim_Plani_ve_Kod_Rehberi.md",
     "Deney Notları/20251125_124418.md",
-    "Lab Günlük",
+    "20251125_12418.md",
     "Deney Notları/20251124_210312.md",
+    "Pasted image 20251126151610.png",
+    "Tez_Akis_Plani.md",
+    "Karalama Defteri.md",
+    "Lab Günlük/2025-11-25.md",
+    "Lab Günlük",
     "Templates/Lab Experiment Note Template.md",
     "Experiment Notes/2025-11-25.md",
     "Deney Notları",
