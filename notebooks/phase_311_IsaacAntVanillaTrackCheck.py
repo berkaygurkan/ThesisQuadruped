@@ -1,29 +1,16 @@
 """
-GÖREV: Play/Inference (BLIND FIX PARITY)
-DURUM:
-  1. HATA GİDERİLDİ: Observation Space (63 vs 60) uyuşmazlığı çözüldü.
-  2. GÜNCELLEME: Play ortamına da 'velocity_commands' eklendi.
-  3. Manuel Model Yolu: Korundu.
+GÖREV: Play/Inference (DYNAMIC STEP TEST)
+AMAÇ: Robotun farklı hız komutlarına (0.5, 2.5, 0.0) anlık tepkisini ölçmek.
 """
 
 import argparse
 import os
-import glob
 import torch
-import sys
 import numpy as np
 from datetime import datetime
 from pathlib import Path
 
-# --- 1. AYARLAR ---
-# [LÜTFEN BURAYI GÜNCELLEYİN] Son başarılı eğitimin klasör yolu
-# Örn: "models/tracking_blindfix/PPO_BlindFix_Ant_20251208_XXXX"
-MANUAL_MODEL_DIR = "models/tracking_blindfix/PPO_BlindFix_Ant_20251208_2020" 
-
-# Hedef Hız (Test)
-TEST_TARGET_SPEED = 1.5
-
-# --- 2. IsaacLab Başlatıcı ---
+# --- 1. IsaacLab Başlatıcı ---
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser()
@@ -35,31 +22,28 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-# --- 3. Importlar ---
+# --- 2. Importlar ---
 import isaaclab.envs.mdp as mdp
 from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab.utils import configclass
-from isaaclab.managers import RewardTermCfg as RewTerm
-# [YENİ] Observation Term Importu
 from isaaclab.managers import ObservationTermCfg as ObsTerm 
 
 from isaaclab_rl.sb3 import Sb3VecEnvWrapper
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecNormalize
 
-# Marker Importları
+# Marker
 from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
 from isaaclab.sim.spawners.shapes import ConeCfg
 from isaaclab.sim.spawners.materials import PreviewSurfaceCfg
 from isaaclab.utils.math import quat_from_angle_axis, quat_mul
 
-# Ortam Base
 try:
     from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
 except ImportError:
     from isaaclab_tasks.manager_based.locomotion.velocity.config.ant.ant_env_cfg import AntEnvCfg
 
-# --- 4. CONFIG PARITY (Eğitimle BİREBİR Aynı Olmalı) ---
+# --- 3. CONFIG ---
 @configclass
 class AntCommandsCfg:
     base_velocity = mdp.UniformVelocityCommandCfg(
@@ -67,7 +51,7 @@ class AntCommandsCfg:
         resampling_time_range=(5.0, 5.0),
         debug_vis=True,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(0.0, 2.0),
+            lin_vel_x=(0.0, 3.0), # Eğitimle uyumlu
             lin_vel_y=(0.0, 0.0),
             ang_vel_z=(-1.0, 1.0),
             heading=(0.0, 0.0),
@@ -82,75 +66,57 @@ class AntTrackingEnvCfg(AntEnvCfg):
         self.scene.num_envs = args_cli.num_envs
         self.sim.device = "cuda:0"
         
-        # [KRİTİK DÜZELTME] GÖZLEM UZAYINA KOMUT EKLEME
-        # Eğitimde bunu yaptık, Play'de de yapmalıyız ki boyut 63 olsun.
+        # Gözlem Düzeltmesi (Blind Fix)
         if hasattr(self.observations, "policy"):
             self.observations.policy.velocity_commands = ObsTerm(
                 func=mdp.generated_commands, 
                 params={"command_name": "base_velocity"}
             )
-
-        # Ödülleri temizle (Hata vermemesi için)
         if hasattr(self.rewards, "progress"): self.rewards.progress = None
 
-# --- 5. Marker Config ---
+# --- 4. Marker ---
 def create_cone_marker_cfg(color, prim_path):
     return VisualizationMarkersCfg(
         prim_path=prim_path,
-        markers={
-            "pointer": ConeCfg(
-                radius=0.10, height=0.4, 
-                visual_material=PreviewSurfaceCfg(diffuse_color=color)
-            )
-        }
+        markers={"pointer": ConeCfg(radius=0.10, height=0.4, visual_material=PreviewSurfaceCfg(diffuse_color=color))}
     )
 
-# --- 6. Model Bulucu ---
-def get_model_files():
-    if os.path.exists(MANUAL_MODEL_DIR):
-        print(f"[YOL] Manuel yol: {MANUAL_MODEL_DIR}")
-        target_dir = MANUAL_MODEL_DIR
-    else:
-        print(f"[UYARI] Manuel yol yok. Otomatik aranıyor...")
-        if not os.path.exists("models"): return None, None
-        all_zips = list(Path("models").rglob("final_model.zip"))
-        if not all_zips: return None, None
-        target_dir = max(all_zips, key=os.path.getmtime).parent
-    
-    model_path = os.path.join(target_dir, "final_model.zip")
-    norm_path = os.path.join(target_dir, "vec_normalize.pkl")
-    return str(model_path), str(norm_path)
+# --- 5. Model Bulucu ---
+def get_latest_run_dir(root_dir="models"):
+    if not os.path.exists(root_dir): return None
+    all_zips = list(Path(root_dir).rglob("final_model.zip"))
+    if not all_zips: return None
+    latest_file = max(all_zips, key=os.path.getmtime)
+    return latest_file.parent
 
-# --- 7. Ana Fonksiyon ---
+# --- 6. Ana Fonksiyon ---
 def main():
-    model_path, norm_path = get_model_files()
-    if not model_path or not os.path.exists(model_path):
-        print(f"[HATA] Model bulunamadı: {model_path}")
+    run_dir = get_latest_run_dir()
+    if not run_dir:
+        print("[HATA] Model bulunamadı.")
         return
 
-    print("\n" + "="*60)
-    print(f"🚀 [MODEL]: {model_path}")
-    print(f"👓 [NORM]:  {norm_path}")
-    print("="*60 + "\n")
+    model_path = os.path.join(run_dir, "final_model.zip")
+    norm_path = os.path.join(run_dir, "vec_normalize.pkl")
 
+    print(f"🚀 [MODEL]: {model_path}")
+    
     # Ortam
     try:
         env_cfg = AntTrackingEnvCfg()
         base_env = ManagerBasedRLEnv(cfg=env_cfg)
     except Exception as e:
-        print(f"[ORTAM HATASI] {e}")
+        print(f"[HATA] {e}")
         return
 
     env = Sb3VecEnvWrapper(base_env)
 
-    # [KRİTİK] Normalizasyon (Artık boyutlar 63==63 olacak)
+    # Normalizasyon
     if os.path.exists(norm_path):
         env = VecNormalize.load(norm_path, env)
         env.training = False
         env.norm_reward = False
-        print(f"[BİLGİ] VecNormalize başarıyla yüklendi. (63 Dim)")
-    else:
-        print("[UYARI] Normalizasyon dosyası yok! Robot kör olabilir.")
+        print(f"👓 [NORM]: Yüklendi.")
 
     model = PPO.load(model_path, env=env)
 
@@ -160,32 +126,19 @@ def main():
     vel_marker.set_visibility(True)
     cmd_marker.set_visibility(True)
 
-    # --- Komut Nesnesi Bulma (Robust) ---
+    # Komut Nesnesi
     cmd_mgr = base_env.command_manager
     command_term = None
-    
-    term_names = []
-    if isinstance(cmd_mgr.active_terms, dict): term_names = list(cmd_mgr.active_terms.keys())
-    elif isinstance(cmd_mgr.active_terms, list): term_names = cmd_mgr.active_terms
-    
-    # 'vel' içeren ismi bul
-    target_name = next((s for s in term_names if "vel" in s), None)
-    if not target_name and term_names: target_name = term_names[0]
+    term_names = list(cmd_mgr.active_terms.keys()) if isinstance(cmd_mgr.active_terms, dict) else cmd_mgr.active_terms
+    target_name = next((s for s in term_names if "vel" in s), term_names[0] if term_names else None)
 
     if target_name:
-        # Nesneye erişim
-        if hasattr(cmd_mgr, "get_term"):
-            try: command_term = cmd_mgr.get_term(target_name)
-            except: pass
-        if command_term is None and hasattr(cmd_mgr, "_terms"):
-             command_term = cmd_mgr._terms.get(target_name)
-        if command_term is None and isinstance(cmd_mgr.active_terms, dict):
-             command_term = cmd_mgr.active_terms.get(target_name)
-    
-    print(f"[BİLGİ] Komut Enjeksiyonu Hazır: {target_name}")
+        if hasattr(cmd_mgr, "get_term"): command_term = cmd_mgr.get_term(target_name)
+        elif hasattr(cmd_mgr, "_terms"): command_term = cmd_mgr._terms.get(target_name)
+        elif isinstance(cmd_mgr.active_terms, dict): command_term = cmd_mgr.active_terms.get(target_name)
 
     print("-" * 60)
-    print(f"SİMÜLASYON BAŞLADI | HEDEF: {TEST_TARGET_SPEED} m/s")
+    print("TEST: DİNAMİK HIZ DEĞİŞİMİ (0.5 -> 2.5 -> 0.0 -> 1.0)")
     print("-" * 60)
 
     obs = env.reset()
@@ -199,27 +152,38 @@ def main():
         base_env.scene["robot"].reset()
     except: pass
 
-    # Hedef Hız
-    target_vel_tensor = torch.tensor([TEST_TARGET_SPEED, 0.0, 0.0], device=device).repeat(base_env.num_envs, 1)
-    
-    # Görselleştirme Ayarları
-    tilt_quat = quat_from_angle_axis(
-        torch.tensor(-np.pi/2, device=device).repeat(base_env.num_envs), 
-        torch.tensor([0.0, 1.0, 0.0], device=device).repeat(base_env.num_envs, 1)
-    )
+    # Görsel Hazırlık
+    tilt_quat = quat_from_angle_axis(torch.tensor(-np.pi/2, device=device).repeat(base_env.num_envs), torch.tensor([0., 1., 0.], device=device).repeat(base_env.num_envs, 1))
 
     step_count = 0
-    while simulation_app.is_running():
-        # 1. Enjeksiyon
-        if command_term:
-            command_term.command[:] = target_vel_tensor
+    current_target_val = 0.0
 
-        # 2. Model
+    while simulation_app.is_running():
+        # --- DİNAMİK HEDEF BELİRLEME (SENARYO) ---
+        if step_count < 200:
+            current_target_val = 0.5  # Yavaş
+            stage = "Yavaş (0.5)"
+        elif step_count < 400:
+            current_target_val = 2.5  # Çok Hızlı
+            stage = "Koşu (2.5)"
+        elif step_count < 600:
+            current_target_val = 0.0  # Dur
+            stage = "Dur (0.0)"
+        else:
+            current_target_val = 1.0  # Normal
+            stage = "Normal (1.0)"
+
+        target_vel = torch.tensor([current_target_val, 0.0, 0.0], device=device).repeat(base_env.num_envs, 1)
+
+        # Enjeksiyon
+        if command_term: command_term.command[:] = target_vel
+
+        # Model
         action, _ = model.predict(obs, deterministic=True)
         obs, reward, done, info = env.step(action)
         step_count += 1
         
-        # 3. Görselleştirme
+        # Görselleştirme
         if step_count % 2 == 0:
              robot_pos = base_env.scene["robot"].data.root_pos_w.clone()
              try: vels = base_env.scene["robot"].data.root_lin_vel_w 
@@ -234,17 +198,14 @@ def main():
              scales[:, 2] = speed * 0.3 + 0.1 
              vel_marker.visualize(marker_pos, quat_mul(q_head, tilt_quat), scales)
 
-             q_cmd = tilt_quat 
              scales_cmd = scales.clone()
-             scales_cmd[:, 2] = TEST_TARGET_SPEED * 0.3 + 0.1
+             scales_cmd[:, 2] = current_target_val * 0.3 + 0.1
              marker_pos[:, 2] += 0.2
-             cmd_marker.visualize(marker_pos, q_cmd, scales_cmd)
+             cmd_marker.visualize(marker_pos, tilt_quat, scales_cmd)
 
-        # 4. Log
-        if step_count % 50 == 0:
-            robot_vel = base_env.scene["robot"].data.root_lin_vel_b
-            vx = robot_vel[0, 0].item()
-            print(f"Adım {step_count} | Hız: {vx:.2f} / {TEST_TARGET_SPEED:.2f} m/s | Ödül: {reward[0]:.2f}")
+        if step_count % 20 == 0:
+            vx = base_env.scene["robot"].data.root_lin_vel_b[0, 0].item()
+            print(f"[{stage}] Adım {step_count} | Hız: {vx:.2f} / {current_target_val:.2f} m/s")
 
     env.close()
     simulation_app.close()
