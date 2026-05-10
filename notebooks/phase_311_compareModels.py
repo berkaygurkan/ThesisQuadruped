@@ -174,20 +174,20 @@ def main():
     # --- GRAFİK ---
     if ppo_vels and lstm_vels:
         plt.figure(figsize=(10, 6))
-        plt.axhline(y=TARGET_VELOCITY, color='green', linestyle='--', label='Hedef (1.5 m/s)', linewidth=2)
+        plt.axhline(y=TARGET_VELOCITY, color='green', linestyle='--', label='Velocity Cmd (1.5 m/s)', linewidth=2)
         
         plt.plot(ppo_vels, label='Baseline PPO', color='red', alpha=0.6)
         plt.plot(lstm_vels, label='Meta-RL LSTM', color='blue', linewidth=2)
         
-        plt.title(f"Ağır Yük Testi ({TEST_MASS_SCALE}x Kütle)")
-        plt.xlabel("Adım")
-        plt.ylabel("Hız (m/s)")
+        plt.title(f"Mass Variation Test({TEST_MASS_SCALE}x Mass)")
+        plt.xlabel("Simulation Step")
+        plt.ylabel("X Velocity (m/s)")
         plt.legend()
         plt.grid(True, alpha=0.3)
         plt.ylim(0, 2.0)
         
-        plt.savefig("comparison_single_session.png")
-        print("\n[SONUÇ] Grafik kaydedildi: comparison_single_session.png")
+        plt.savefig("comparison_single_session3Mass.png")
+        print("\n[SONUÇ] Grafik kaydedildi: comparison_single_session1.png")
     
     base_env.close()
     simulation_app.close()
